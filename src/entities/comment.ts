@@ -3,10 +3,10 @@ import { createSchema, Entity, Field, Inject, Repository } from "mongoose-orm";
 
 @Entity({ timestamps: true })
 export class Comment {
-  @Field({ required: true })
+  @Field({ type: String, required: true })
   user: string;
 
-  @Field({ required: true })
+  @Field({ type: String, required: true })
   text: string;
 }
 

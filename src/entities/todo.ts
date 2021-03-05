@@ -5,10 +5,10 @@ import { Comment } from "./comment";
 
 @Entity({ timestamps: true })
 export class Todo {
-  @Field({ required: true })
+  @Field({ type: String, required: true })
   title: string;
 
-  @Field({ required: true })
+  @Field({ type: String, required: true })
   content: string;
 
   @Field({
@@ -16,6 +16,9 @@ export class Todo {
     cascade: true,
   })
   comments?: Comment[];
+
+  @Field({ type: String, default: "new" })
+  status: "new" | "processing" | "done";
 }
 
 export const TodoSchema = createSchema(Todo);

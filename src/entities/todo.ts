@@ -1,20 +1,28 @@
-import { connection } from "../helpers/connection";
+import { SchemaTypes } from "mongoose";
 import { createSchema, Entity, Field, Inject, Repository } from "mongoose-orm";
+import { connection } from "../helpers/connection";
+import { Comment } from "./comment";
 
 @Entity({ timestamps: true })
 export class Todo {
-  @Field()
+  @Field({ required: true })
   title: string;
 
-  @Field()
+  @Field({ required: true })
   content: string;
+
+  @Field({
+    type: [{ type: SchemaTypes.ObjectId, ref: "Comment" }],
+    cascade: true,
+  })
+  comments?: Comment[];
 }
 
-export const PhotoSchema = createSchema(Todo);
+export const TodoSchema = createSchema(Todo);
 
 @Inject<Repository>({
   connection: connection,
-  schema: PhotoSchema,
+  schema: TodoSchema,
 })
 export class TodoRepository extends Repository<Todo> {}
 

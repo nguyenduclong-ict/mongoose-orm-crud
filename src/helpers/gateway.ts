@@ -1,7 +1,10 @@
-import { Express, RequestHandler, Router } from "express";
+import { Express, RequestHandler, Router, text } from "express";
 import globby from "globby";
 import { Repository } from "mongoose-orm";
 import { ERROR_CODES, RequestError } from "./error";
+
+// prettier-ignore
+const gSpace = (txt: string, length: number) => txt + new Array(Math.max(0, length - txt.length)).fill(" ").join("");
 
 export interface Api {
   path: string;
@@ -15,12 +18,7 @@ export interface Api {
   )[];
   middlewares?: RequestHandler[];
   routes?: {
-    [x: string]:
-      | string
-      | {
-          name: CrudMethod;
-          middlewares: RequestHandler[];
-        };
+    [x: string]: RequestHandler | RequestHandler[];
   };
   router?: Router;
 }
@@ -53,11 +51,12 @@ const log = {
     path: string,
     action: string
   ) => {
-    console.error(
-      method,
+    console.log(
+      "%s %s => %s.%s",
+      gSpace(method, 7).toUpperCase(),
       (item.path + path).replace(/\/$/, ""),
-      "=>",
-      item.repository.name + "." + action
+      item.repository.name,
+      action
     );
   },
   error(
@@ -68,9 +67,9 @@ const log = {
     error: any
   ) {
     console.error(
+      "%s %s => %s.%s",
       method,
       (item.path + path).replace(/\/$/, ""),
-      "=>",
       item.repository.name + "." + action,
       error
     );
@@ -285,6 +284,27 @@ export class Gateway {
         api.router.use(...api.middlewares);
       }
       if (api.repository) this.registerCrud(api);
+      // Register custom routes
+      if (api.routes) {
+        Object.keys(api.routes).forEach((key) => {
+          let handlers = api.routes[key];
+          if (handlers) {
+            handlers = Array.isArray(handlers) ? handlers : [handlers];
+            if (!handlers.length) return;
+            const method: string = key.split(" ").shift().toLocaleLowerCase();
+            // prettier-ignore
+            if (!["post","get","post","put","patch","delete","connect","options","trace","head", ].includes(method)) {
+              return;
+            }
+            const endpoint = key.split(" ").pop();
+            if (!endpoint) return;
+            // @ts-expect-error
+            api.router[method](endpoint, ...handlers);
+            // prettier-ignore
+            console.log("%s %s%s => %s", gSpace(method.toLocaleUpperCase(), 7), api.path, endpoint, handlers.map((h) => h.name).join(" => "));
+          }
+        });
+      }
       this.apis.push(api);
       this.app.use(api.path, api.router);
     });

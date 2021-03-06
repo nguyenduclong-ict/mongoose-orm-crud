@@ -1,50 +1,31 @@
 import express from "express";
 import { createServer } from "http";
-import { commentRepository } from "./entities/comment";
-import { todoRepository } from "./entities/todo";
+import morgan from "morgan";
 import { HandleRequestError } from "./helpers/error";
 import { Gateway } from "./helpers/gateway";
-import morgan from "morgan";
+import path from "path";
+
 export const app = express();
+export const gateway = new Gateway(app);
+export const server = createServer(app);
+
 app.use(morgan("dev"));
 app.use(express.json());
 app.get("/", (req, res) => {
   res.send("sever work!");
 });
-export const gateway = new Gateway({
-  app,
-  crud: [
-    {
-      path: "/todo",
-      repository: todoRepository,
-      methods: [
-        "create",
-        "update",
-        "delete",
-        "deleteOne",
-        {
-          // custom
-          name: "list",
-          middlewares: [
-            (req, res, next) => {
-              // Example set max pageSize
-              if (Number(req.query.pageSize) > 100) {
-                (req.query as any).pageSize = 100;
-              }
-              next();
-            },
-          ],
-        },
-      ],
+
+(async () => {
+  await gateway.registerRoute(path.join(__dirname, "api"), {
+    expandDirectories: {
+      extensions: ["ts", "js"],
+      files: ["*.api.ts", "*.api.js"],
     },
-    {
-      path: "/comment",
-      repository: commentRepository,
-    },
-  ],
-});
-const server = createServer(app);
-app.use(HandleRequestError);
-server.listen(process.env.PORT || 5000, () => {
-  console.log("Server listen on port ", 5000);
-});
+  });
+  app.use(HandleRequestError);
+
+  const port = Number(process.env.PORT || 5000);
+  server.listen(port, () => {
+    console.log("Server listen on port ", port);
+  });
+})();

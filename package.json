@@ -4,9 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "dev": "ts-node -r ./tsconfig-paths-bootstrap.js src/index.ts",
+    "dev": "ts-node-dev -r dotenv/config -r ./tsconfig-paths-bootstrap.js src/index.ts dotenv_config_path=.env.dev",
     "build": "tsc",
-    "start": "node -r ./tsconfig-paths-bootstrap.js dist/index.js"
+    "start": "node -r dotenv/config -r ./tsconfig-paths-bootstrap.js dist/index.js"
   },
   "dependencies": {
     "dotenv": "^8.2.0",

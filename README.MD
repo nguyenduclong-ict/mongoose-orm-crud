@@ -50,4 +50,7 @@ export default {
   },
 } as Api;
 
+// example query list todo and populate comments
+GET /todo?populates=["comments"]
+
 ```

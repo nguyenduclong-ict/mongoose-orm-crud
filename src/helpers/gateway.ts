@@ -2,6 +2,7 @@ import { Express, RequestHandler, Router, text } from "express";
 import globby from "globby";
 import { Repository } from "mongoose-orm";
 import { ERROR_CODES, RequestError } from "./error";
+import { getEntityForm } from "./mongoose";
 
 // prettier-ignore
 const gSpace = (txt: string, length: number) => txt + new Array(Math.max(0, length - txt.length)).fill(" ").join("");
@@ -21,6 +22,10 @@ export interface Api {
     [x: string]: RequestHandler | RequestHandler[];
   };
   router?: Router;
+}
+
+export function Api(data: Api | Api[]) {
+  return data;
 }
 
 const parseQuery = (req: any, res: any, next: any) => {
@@ -53,10 +58,10 @@ const log = {
   ) => {
     console.log(
       "%s %s => %s.%s",
-      gSpace(method, 7).toUpperCase(),
-      (item.path + path).replace(/\/$/, ""),
-      item.repository.name,
-      action
+      gSpace(method, 7).toUpperCase().cyan,
+      (item.path + path).replace(/\/$/, "").green,
+      item.repository.name.cyan,
+      action.cyan
     );
   },
   error(
@@ -68,9 +73,10 @@ const log = {
   ) {
     console.error(
       "%s %s => %s.%s",
-      method,
-      (item.path + path).replace(/\/$/, ""),
-      item.repository.name + "." + action,
+      method.cyan,
+      (item.path + path).replace(/\/$/, "").green,
+      item.repository.name.cyan,
+      action.cyan,
       error
     );
   },
@@ -82,16 +88,8 @@ const vError = (rs: any) =>
     code: ERROR_CODES.VALIDATOR_ERROR,
   });
 
-type CrudMethod =
-  | "list"
-  | "find"
-  | "findOne"
-  | "create"
-  | "bulkCreate"
-  | "update"
-  | "updateOne"
-  | "delete"
-  | "deleteOne";
+// prettier-ignore
+type CrudMethod = "list"| "find"| "findOne"| "create"| "bulkCreate"| "update"| "updateOne"| "delete"| "deleteOne"| "schema";
 
 export class Gateway {
   app: Express;
@@ -113,6 +111,7 @@ export class Gateway {
       "updateOne",
       "delete",
       "deleteOne",
+      "schema",
     ];
     const repository = api.repository;
     const router = api.router;
@@ -124,42 +123,63 @@ export class Gateway {
 
     if ((h.list = has("list"))) {
       const mds = h.list.middlewares || [];
-      router.get("/", parseQuery, ...mds, (req, res, next) =>
-        repository
-          .list(req.query)
+      router.get("/", parseQuery, ...mds, (req, res, next) => {
+        const ctx = { ...(req.query as any), meta: req.meta };
+        if (req.query.search) {
+          let text = _.has(req.query, "exact")
+            ? '"' + req.query.search + '"'
+            : req.query.search;
+          _.set(ctx, "query.$text.$search", text);
+        }
+        return repository
+          .list(ctx)
           .then((data) => res.json(data))
           .catch((error) => {
             log.error("GET", api, "/", "list", error);
             next(error);
-          })
-      );
+          });
+      });
       log.register("GET", api, "/", "list");
     }
     if ((h.find = has("find"))) {
       const mds = h.find.middlewares || [];
-      router.get("/find", parseQuery, ...mds, (req, res, next) =>
-        repository
-          .find(req.query)
+      router.get("/find", parseQuery, ...mds, (req, res, next) => {
+        const ctx = { ...(req.query as any), meta: req.meta };
+        if (req.query.search) {
+          let text = _.has(req.query, "exact")
+            ? '"' + req.query.search + '"'
+            : req.query.search;
+          _.set(ctx, "query.$text.$search", text);
+        }
+        return repository
+          .find(ctx)
           .then((data) => res.json(data))
           .catch((error) => {
             log.error("GET", api, "/find", "find", error);
             next(error);
-          })
-      );
+          });
+      });
       log.register("GET", api, "/find", "find");
     }
 
     if ((h.findOne = has("findOne"))) {
       const mds = h.findOne.middlewares || [];
-      router.get("/find-one", parseQuery, ...mds, (req, res, next) =>
-        repository
-          .findOne(req.query)
+      router.get("/find-one", parseQuery, ...mds, (req, res, next) => {
+        const ctx = { ...(req.query as any), meta: req.meta };
+        if (req.query.search) {
+          let text = _.has(req.query, "exact")
+            ? '"' + req.query.search + '"'
+            : req.query.search;
+          _.set(ctx, "query.$text.$search", text);
+        }
+        return repository
+          .findOne(ctx)
           .then((data) => res.json(data))
           .catch((error) => {
             log.error("GET", api, "/find-one", "findOne", error);
             next(error);
-          })
-      );
+          });
+      });
       log.register("GET", api, "/find-one", "findOne");
     }
 
@@ -172,7 +192,10 @@ export class Gateway {
           if (!validateResult.valid) {
             return next(vError(validateResult));
           }
-          const response = await repository.create(req.body);
+          const response = await repository.create({
+            ...req.body,
+            meta: req.meta,
+          });
           return res.json(response);
         } catch (error) {
           log.error("POST", api, "/", "create", error);
@@ -197,7 +220,10 @@ export class Gateway {
               return next(vError(validateResult));
             }
           }
-          const response = await repository.createMany(req.body);
+          const response = await repository.createMany({
+            ...req.body,
+            meta: req.meta,
+          });
           return res.json(response);
         } catch (error) {
           log.error("POST", api, "/bulk-create", "bulkCreate", error);
@@ -211,7 +237,10 @@ export class Gateway {
       const mds = h.update.middlewares || [];
       router.put("/", ...mds, async (req, res, next) => {
         try {
-          const response = await repository.update(req.body);
+          const response = await repository.update({
+            ...req.body,
+            meta: req.meta,
+          });
           return res.json(response);
         } catch (error) {
           log.error("POST", api, "/", "update", error);
@@ -230,21 +259,25 @@ export class Gateway {
             query: {
               id: req.params.id,
             },
+            meta: req.meta,
           });
           return res.json(data);
         } catch (error) {
-          log.error("POST", api, "/bulk-create", "updateOne", error);
+          log.error("PUT", api, "/:id", "updateOne", error);
           next(error);
         }
       });
-      log.register("PUT", api, "/", "updateOne");
+      log.register("PUT", api, "/:id", "updateOne");
     }
 
     if ((h.delete = has("delete"))) {
       const mds = h.delete.middlewares || [];
       router.delete("/", ...mds, (req, res, next) => {
         repository
-          .delete(req.query)
+          .delete({
+            ...req.body,
+            meta: req.meta,
+          })
           .then((data) => res.json(data))
           .catch((error) => {
             log.error("DELETE", api, "/", "delete", error);
@@ -260,6 +293,7 @@ export class Gateway {
         repository
           .delete({
             query: { id: req.params.id },
+            meta: req.meta,
           })
           .then((data) => res.json(data))
           .catch((error) => {
@@ -268,6 +302,14 @@ export class Gateway {
           });
       });
       log.register("DELETE", api, "/:id", "delete");
+    }
+
+    if ((h.deleteOne = has("schema"))) {
+      const mds = h.deleteOne.middlewares || [];
+      router.get("/schema", ...mds, (req, res, next) => {
+        res.json(getEntityForm(repository));
+      });
+      console.log("%s %s", gSpace("GET", 7).cyan, "/schema".green);
     }
   }
 
@@ -278,35 +320,44 @@ export class Gateway {
     const modules = await globby(folderPath, filterOptions);
     modules.forEach((filePath) => {
       const api: Api = require(filePath).default;
-      if (!api || !api.path) return;
-      api.router = Router();
-      if (api.middlewares && api.middlewares.length) {
-        api.router.use(...api.middlewares);
+      if (Array.isArray(api)) {
+        api.forEach((e) => this.registerApi(e));
+      } else {
+        this.registerApi(api);
       }
-      if (api.repository) this.registerCrud(api);
-      // Register custom routes
-      if (api.routes) {
-        Object.keys(api.routes).forEach((key) => {
-          let handlers = api.routes[key];
-          if (handlers) {
-            handlers = Array.isArray(handlers) ? handlers : [handlers];
-            if (!handlers.length) return;
-            const method: string = key.split(" ").shift().toLocaleLowerCase();
-            // prettier-ignore
-            if (!["post","get","post","put","patch","delete","connect","options","trace","head", ].includes(method)) {
-              return;
-            }
-            const endpoint = key.split(" ").pop();
-            if (!endpoint) return;
-            // @ts-expect-error
-            api.router[method](endpoint, ...handlers);
-            // prettier-ignore
-            console.log("%s %s%s => %s", gSpace(method.toLocaleUpperCase(), 7), api.path, endpoint, handlers.map((h) => h.name).join(" => "));
-          }
-        });
-      }
-      this.apis.push(api);
-      this.app.use(api.path, api.router);
     });
+  }
+
+  registerApi(api: Api) {
+    if (!api || !api.path) return;
+    api.router = Router();
+    if (api.middlewares && api.middlewares.length) {
+      api.router.use(...api.middlewares);
+    }
+    if (api.repository) this.registerCrud(api);
+    // Register custom routes
+    if (api.routes) {
+      Object.keys(api.routes).forEach((key) => {
+        let handlers = api.routes[key];
+        if (handlers) {
+          handlers = Array.isArray(handlers) ? handlers : [handlers];
+          if (!handlers.length) return;
+          const method: string = key.split(" ").shift().toLocaleLowerCase();
+          // prettier-ignore
+          if (!["post","get","post","put","patch","delete","connect","options","trace","head"].includes(method)) return;
+          const endpoint = key.split(" ").pop();
+          if (!endpoint) return;
+          // @ts-expect-error
+          api.router[method](endpoint, ...handlers);
+          // prettier-ignore
+          console.log("%s %s%s => %s", gSpace(
+            method.toLocaleUpperCase(), 7).cyan, api.path.green, endpoint.green, 
+            handlers.map((h) => h.name.cyan).join(" => ")
+          );
+        }
+      });
+    }
+    this.apis.push(api);
+    this.app.use(api.path, api.router);
   }
 }
